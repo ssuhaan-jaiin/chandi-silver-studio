@@ -5,6 +5,7 @@ import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import { CartProvider } from "@/context/CartContext";
 import { LogoProvider } from "@/context/LogoContext";
+import { Toaster } from "@/components/ui/sonner";
 
 const dmSans = DM_Sans({
   variable: "--font-sans",
@@ -32,6 +33,7 @@ export default function RootLayout({
             <main className="flex-1">{children}</main>
             <Footer />
           </LogoProvider>
+          <Toaster position="bottom-right" />
         </CartProvider>
       </body>
     </html>

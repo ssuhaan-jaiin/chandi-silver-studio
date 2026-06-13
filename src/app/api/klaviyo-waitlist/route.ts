@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { checkRateLimit, getClientIp } from '@/lib/rateLimit'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const HANDLE_RE = /^[a-z0-9-]+$/
 
 export async function POST(req: NextRequest) {
   const ip = getClientIp(req)
@@ -9,7 +10,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Too many requests' }, { status: 429 })
   }
 
-  let body: { email?: string; website?: string }
+  let body: { email?: string; website?: string; productHandle?: string; productTitle?: string }
   try {
     body = await req.json()
   } catch {
@@ -21,15 +22,26 @@ export async function POST(req: NextRequest) {
   }
 
   const email = typeof body.email === 'string' ? body.email.trim() : ''
-  if (!email || !EMAIL_RE.test(email)) {
+  if (!email || !EMAIL_RE.test(email) || email.length > 254) {
     return NextResponse.json({ error: 'Invalid email address' }, { status: 400 })
   }
 
-  const listId = process.env.KLAVIYO_LIST_ID
+  const productHandle = typeof body.productHandle === 'string'
+    ? body.productHandle.trim().slice(0, 255)
+    : ''
+  const productTitle = typeof body.productTitle === 'string'
+    ? body.productTitle.trim().slice(0, 500)
+    : ''
+
+  if (productHandle && !HANDLE_RE.test(productHandle)) {
+    return NextResponse.json({ error: 'Invalid product handle' }, { status: 400 })
+  }
+
+  const listId = process.env.KLAVIYO_WAITLIST_LIST_ID
   const privateKey = process.env.KLAVIYO_PRIVATE_KEY
 
   if (!listId || !privateKey) {
-    console.error('Klaviyo env vars missing: KLAVIYO_LIST_ID or KLAVIYO_PRIVATE_KEY')
+    console.error('Klaviyo env vars missing: KLAVIYO_WAITLIST_LIST_ID or KLAVIYO_PRIVATE_KEY')
     return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })
   }
 
@@ -51,6 +63,10 @@ export async function POST(req: NextRequest) {
                   type: 'profile',
                   attributes: {
                     email,
+                    properties: {
+                      waitlist_product: productHandle,
+                      waitlist_product_title: productTitle,
+                    },
                     subscriptions: {
                       email: { marketing: { consent: 'SUBSCRIBED' } },
                     },
@@ -67,13 +83,13 @@ export async function POST(req: NextRequest) {
     })
 
     if (!res.ok && res.status !== 202) {
-      console.error('Klaviyo subscribe error:', res.status)
-      return NextResponse.json({ error: 'Subscription failed' }, { status: 500 })
+      console.error('Klaviyo waitlist error:', res.status)
+      return NextResponse.json({ error: 'Waitlist signup failed' }, { status: 500 })
     }
 
     return NextResponse.json({ ok: true })
   } catch (err) {
-    console.error('Klaviyo fetch error:', err)
+    console.error('Klaviyo waitlist fetch error:', err)
     return NextResponse.json({ error: 'Network error' }, { status: 500 })
   }
 }
